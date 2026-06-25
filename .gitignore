@@ -1,0 +1,11 @@
+build/
+*.so
+*.o
+*.gcda
+*.gcno
+*.gcov
+luacov.stats.out
+.DS_Store
+*.swp
+*.swo
+*~
