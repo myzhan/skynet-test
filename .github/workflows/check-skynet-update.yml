@@ -1,0 +1,66 @@
+name: Check Skynet Update
+
+on:
+  schedule:
+    # Once a day at 08:17 UTC
+    - cron: '17 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Check for skynet updates
+        id: check
+        run: |
+          cd skynet
+          git fetch origin master
+          LOCAL=$(git rev-parse HEAD)
+          REMOTE=$(git rev-parse origin/master)
+          echo "local=$LOCAL" >> "$GITHUB_OUTPUT"
+          echo "remote=$REMOTE" >> "$GITHUB_OUTPUT"
+          if [ "$LOCAL" != "$REMOTE" ]; then
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+            echo "Skynet has new commits: $LOCAL -> $REMOTE"
+          else
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            echo "Skynet is up to date: $LOCAL"
+          fi
+
+      - name: Update submodule
+        if: steps.check.outputs.updated == 'true'
+        run: |
+          cd skynet
+          git checkout origin/master
+
+      - name: Install dependencies
+        if: steps.check.outputs.updated == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf libreadline-dev
+
+      - name: Build and test
+        if: steps.check.outputs.updated == 'true'
+        run: make test
+
+      - name: Create PR to update submodule
+        if: steps.check.outputs.updated == 'true' && success()
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "Update skynet submodule to ${{ steps.check.outputs.remote }}"
+          title: "Update skynet submodule"
+          body: |
+            Skynet has been updated.
+
+            - Previous: `${{ steps.check.outputs.local }}`
+            - Latest: `${{ steps.check.outputs.remote }}`
+
+            Tests passed with the new version.
+          branch: update-skynet-submodule
+          delete-branch: true
