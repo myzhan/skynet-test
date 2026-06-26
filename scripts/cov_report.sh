@@ -39,18 +39,20 @@ for f in skynet-*.gcda; do
 done
 
 # In luaclib: <so>-<source>.gcno → <source>.gcno
+# For skynet.so-lua-xxx.gcno, strip "skynet.so-" prefix to get "lua-xxx.gcno"
 for subdir in luaclib cservice; do
     if [ -d "$subdir" ]; then
         cd "$subdir"
         for f in *.gcno; do
             [ -f "$f" ] || continue
-            base="${f##*-}"
-            ln -sf "$f" "$base" 2>/dev/null
+            # Strip everything up to first "-" (e.g. "skynet.so-lua-bson.gcno" → "lua-bson.gcno")
+            base="${f#*-}"
+            [ "$base" != "$f" ] && ln -sf "$f" "$base" 2>/dev/null
         done
         for f in *.gcda; do
             [ -f "$f" ] || continue
-            base="${f##*-}"
-            ln -sf "$f" "$base" 2>/dev/null
+            base="${f#*-}"
+            [ "$base" != "$f" ] && ln -sf "$f" "$base" 2>/dev/null
         done
         cd "$SKYNET_DIR"
     fi
@@ -70,6 +72,7 @@ gcovr \
     --exclude '.*lua-md5.*' \
     --exclude '.*sproto.*' \
     --gcov-ignore-errors 'no_working_dir_found' \
+    --gcov-ignore-parse-errors 'negative_hits.warn_once_per_file' \
     --html --html-details \
     -o "$COV_OUT/index.html"
 

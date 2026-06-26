@@ -22,9 +22,16 @@ local function file_has_run_handler(filepath)
     if not f then return false end
     local content = f:read("*a")
     f:close()
-    -- Strip comments before checking
     local stripped = content:gsub("%-%-[^\n]*", "") -- strip single-line comments
-    return stripped:find('skynet%.dispatch') and stripped:find('"run"')
+    -- Legacy pattern: skynet.dispatch + "run"
+    if stripped:find('skynet%.dispatch') and stripped:find('"run"') then
+        return true
+    end
+    -- New pattern: T.run() or testlib.run()
+    if stripped:find('%.run%(') and stripped:find('%.case%(') then
+        return true
+    end
+    return false
 end
 
 local function discover_cases()
@@ -96,41 +103,86 @@ skynet.start(function()
         local case_start = skynet.now()
 
         local ok, result = pcall(run_case, case)
-        local case_result = {
-            name = case.name,
-            suite = "default",
-            status = "error",
-            duration = (skynet.now() - case_start) / 100.0,
-        }
+        local elapsed = (skynet.now() - case_start) / 100.0
 
         if not ok then
-            case_result.status = "error"
-            case_result.message = "Runner error: " .. tostring(result)
-        else
-            case_result.status = result.status or "error"
-            case_result.message = result.message
-        end
-
-        local symbol = ({ pass = "PASS", fail = "FAIL", error = "ERROR", skip = "SKIP" })[case_result.status] or "FAIL"
-        print(string.format("  [%s] %s (%.3fs)", symbol, case.name, case_result.duration))
-        if case_result.message then
-            print("        " .. case_result.message)
-        end
-
-        if case_result.status == "pass" then
-            results.passed = results.passed + 1
-        elseif case_result.status == "fail" then
-            results.failed = results.failed + 1
-        elseif case_result.status == "error" then
+            -- Runner-level error
+            local case_result = {
+                name = case.name,
+                suite = case.name,
+                status = "error",
+                duration = elapsed,
+                message = "Runner error: " .. tostring(result),
+            }
             results.errors = results.errors + 1
-        elseif case_result.status == "skip" then
-            results.skipped = results.skipped + 1
+            results.cases[#results.cases + 1] = case_result
+        elseif result.cases then
+            -- Multi-case result: expand sub-cases
+            for _, sub in ipairs(result.cases) do
+                local case_result = {
+                    name = case.name .. "/" .. sub.name,
+                    suite = case.name,
+                    status = sub.status or "error",
+                    duration = sub.duration or 0,
+                    message = sub.message,
+                }
+                if case_result.status == "pass" then
+                    results.passed = results.passed + 1
+                elseif case_result.status == "fail" then
+                    results.failed = results.failed + 1
+                elseif case_result.status == "error" then
+                    results.errors = results.errors + 1
+                elseif case_result.status == "skip" then
+                    results.skipped = results.skipped + 1
+                end
+                results.cases[#results.cases + 1] = case_result
+            end
+            results.total = results.total + #result.cases - 1
+        else
+            -- Legacy single-case result
+            local case_result = {
+                name = case.name,
+                suite = case.name,
+                status = result.status or "error",
+                duration = elapsed,
+                message = result.message,
+            }
+            if case_result.status == "pass" then
+                results.passed = results.passed + 1
+            elseif case_result.status == "fail" then
+                results.failed = results.failed + 1
+            elseif case_result.status == "error" then
+                results.errors = results.errors + 1
+            elseif case_result.status == "skip" then
+                results.skipped = results.skipped + 1
+            end
+            results.cases[#results.cases + 1] = case_result
         end
-
-        results.cases[#results.cases + 1] = case_result
     end
 
     results.duration = (skynet.now() - start_time) / 100.0
+
+    -- Print results as a table
+    local name_width = 4
+    for _, c in ipairs(results.cases) do
+        if #c.name > name_width then name_width = #c.name end
+    end
+    name_width = name_width + 2
+
+    local sep = "+" .. string.rep("-", name_width + 2) .. "+" .. string.rep("-", 10) .. "+" .. string.rep("-", 10) .. "+" .. string.rep("-", 40) .. "+"
+    local hdr = string.format("| %-" .. name_width .. "s | %-8s | %-8s | %-38s |", "Name", "Status", "Duration", "Message")
+
+    print(sep)
+    print(hdr)
+    print(sep)
+    for _, c in ipairs(results.cases) do
+        local status_str = c.status:upper()
+        local dur_str = string.format("%.3fs", c.duration)
+        local msg = c.message or ""
+        if #msg > 38 then msg = msg:sub(1, 35) .. "..." end
+        print(string.format("| %-" .. name_width .. "s | %-8s | %-8s | %-38s |", c.name, status_str, dur_str, msg))
+    end
+    print(sep)
 
     print("")
     print(string.format("=== Results: %d total, %d passed, %d failed, %d errors, %d skipped (%.3fs) ===",
@@ -172,5 +224,5 @@ skynet.start(function()
         print("Results written to " .. RESULT_FILE)
     end
 
-    skynet.abort()
+    os.exit(0)
 end)

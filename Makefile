@@ -85,9 +85,7 @@ test: build build-mock
 		$(LUA) scripts/generate_junit.lua $(RESULT_DIR)/result.json $(RESULT_DIR)/junit.xml; \
 		echo "JUnit report: $(RESULT_DIR)/junit.xml"; \
 	else \
-		cat $(RESULT_DIR)/result.json 2>/dev/null || true; \
-		echo "---"; \
-		echo "Test output log: $(RESULT_DIR)/test_output.log"; \
+		grep -A 1000 '^+---' $(RESULT_DIR)/test_output.log 2>/dev/null | grep -B 1000 '^=== Results' || cat $(RESULT_DIR)/result.json 2>/dev/null || true; \
 	fi
 	@echo "=== Tests complete ==="
 
@@ -124,6 +122,7 @@ test-cov: clean-cov build-cov build-mock
 		$(if $(findstring mockdns,$(CONFIG)),$(MOCK_ENV),) \
 		./skynet ../test/config/config.$(CONFIG) \
 		> ../$(RESULT_DIR)/test_output.log 2>&1
+	@grep -A 1000 '^+---' $(RESULT_DIR)/test_output.log 2>/dev/null | grep -B 1000 '^=== Results' || cat $(RESULT_DIR)/result.json 2>/dev/null || true
 	@echo "=== Generating C coverage HTML report ==="
 	@scripts/cov_report.sh . $(COV_DIR)
 	@echo ""
@@ -131,8 +130,10 @@ test-cov: clean-cov build-cov build-mock
 	@echo "Coverage report: $(COV_DIR)/index.html"
 
 clean-cov:
-	@echo "=== Cleaning coverage data ==="
+	@echo "=== Cleaning coverage data and build artifacts ==="
 	@find $(SKYNET_DIR) -name "*.gcda" -delete 2>/dev/null || true
+	@find $(SKYNET_DIR) -name "*.gcno" -delete 2>/dev/null || true
+	$(MAKE) -C $(SKYNET_DIR) clean
 
 # ============================================
 # Benchmark targets
