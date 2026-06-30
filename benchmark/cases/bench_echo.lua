@@ -12,15 +12,14 @@ skynet.start(function()
                 skynet.call(echo_svc, "lua", "warmup")
             end
 
-            -- Sequential benchmark
-            local start = skynet.now()
+            -- Sequential benchmark (thread CPU time)
+            local cpu_start = skynet.stat("cpu")
             for i = 1, iterations do
                 skynet.call(echo_svc, "lua", "test")
             end
-            local elapsed = skynet.now() - start
-            local elapsed_sec = elapsed / 100.0
-            local ops = iterations / elapsed_sec
-            local avg = elapsed / iterations
+            local cpu_elapsed = skynet.stat("cpu") - cpu_start
+            local ops = iterations / cpu_elapsed
+            local avg = cpu_elapsed / iterations * 1000
 
             skynet.ret(skynet.pack({
                 ops_per_sec = ops,

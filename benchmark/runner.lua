@@ -82,6 +82,10 @@ skynet.start(function()
             end
             print(string.format("│ %-40s │ %12s │ %10s │ %10d │",
                 case.name:sub(1, 40), ops_str, time_str, iters))
+            if result.detail then
+                print(string.format("│   └─ %-76s │",
+                    result.detail))
+            end
             all_results[#all_results + 1] = {
                 name = case.name,
                 ops_per_sec = ops,
@@ -104,7 +108,7 @@ skynet.start(function()
             if r.error then
                 f:write(string.format(',\n      "error": "%s"', r.error:gsub('"', '\\"')))
             else
-                f:write(string.format(',\n      "ops_per_sec": %d', r.ops_per_sec))
+                f:write(string.format(',\n      "ops_per_sec": %.0f', r.ops_per_sec))
                 f:write(string.format(',\n      "avg_time_ms": %.4f', r.avg_time_ms))
                 f:write(string.format(',\n      "iterations": %d', r.iterations))
             end
