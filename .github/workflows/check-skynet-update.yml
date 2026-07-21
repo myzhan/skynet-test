@@ -6,6 +6,10 @@ on:
     - cron: '17 8 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   check-and-test:
     runs-on: ubuntu-latest
